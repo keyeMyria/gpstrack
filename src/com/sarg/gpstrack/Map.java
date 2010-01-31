@@ -2,6 +2,7 @@ package com.sarg.gpstrack;
 
 import java.io.File;
 
+
 import java.io.IOException;
 
 import android.content.Intent;
@@ -14,6 +15,7 @@ import android.graphics.Paint.Style;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Debug;
@@ -21,6 +23,7 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.Window;
+import android.view.MenuItem.OnMenuItemClickListener;
 import android.widget.Toast;
 
 import com.google.android.maps.GeoPoint;
@@ -35,12 +38,15 @@ public class Map extends MapActivity {
 	private static final int MENU_PLAY = 1;
 	private static final int MENU_POSITION = 2;
 	private static final int MENU_LOAD_TRACK = 3;
+	
+	protected static final int FILE_PICK = 1;
 	private MyLocationOverlay myLocation;
 	
 	LocationManager mLocationManager;
 	LocationListener mLocationListener;
 	
 	MapView mapView;
+	private TrackOverlay trackOverlay;
 
 	/** Called when the activity is first created. */
     @Override
@@ -53,15 +59,18 @@ public class Map extends MapActivity {
         setContentView(R.layout.main);           
         
         mapView = (MapView) findViewById(R.id.mapview);
+ 
+        mapView.setBuiltInZoomControls(true);
+        mapView.setClickable(true);
+ 
         myLocation = new MyLocationOverlay(this, mapView);
         myLocation.enableMyLocation();
         myLocation.enableCompass();
         
-        mapView.setBuiltInZoomControls(true);
-        mapView.setClickable(true);
- 
+        trackOverlay = new TrackOverlay(null);
+        
         mapView.getOverlays().add(myLocation);
-        mapView.getOverlays().add(new TrackOverlay("/sdcard/default.gpx"));
+        mapView.getOverlays().add(trackOverlay);
     }
     
     @Override
@@ -74,14 +83,32 @@ public class Map extends MapActivity {
     public boolean onCreateOptionsMenu(Menu menu) {
     	menu.add(0, MENU_TRACK, 0, "New track").setIntent(new Intent(this, com.sarg.gpstrack.Menu.class));
     	
-    	Intent fileChooser = new Intent(Intent.ACTION_GET_CONTENT);
-    	fileChooser.addCategory(Intent.CATEGORY_OPENABLE);
-    	fileChooser.setType("*/*");
-    	menu.add(0, MENU_LOAD_TRACK, 0, "Load track").setIntent(Intent.createChooser(fileChooser, null));
+		menu.add(0, MENU_LOAD_TRACK, 0, "Load track").setOnMenuItemClickListener(
+				new OnMenuItemClickListener() {
+					@Override
+					public boolean onMenuItemClick(MenuItem item) {
+				    	Intent fileChooser = new Intent(Intent.ACTION_PICK);
+				    	fileChooser.setDataAndType(Uri.fromFile(new File("/sdcard")), "*/*");
+
+				    	startActivityForResult(fileChooser, FILE_PICK);
+						return false;
+					}
+				}
+		);
     	menu.add(0, MENU_PLAY, 0, "Play");
     	menu.add(0, MENU_POSITION, 0, "My position");
     	
     	return super.onCreateOptionsMenu(menu);
+    }
+    
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    	if (requestCode == FILE_PICK) {
+    		if (resultCode == RESULT_OK) {
+    			trackOverlay.setTrack(data.getData().getPath());
+    		}
+    	}
+    	super.onActivityResult(requestCode, resultCode, data);
     }
     
     @Override
@@ -149,8 +176,14 @@ public class Map extends MapActivity {
 			return path;
 		}
 		
-		public TrackOverlay(String fileName) {
+		public void setTrack(String fileName) {
 			new DownloadTrack().execute(fileName);
+		}
+		
+		public TrackOverlay(String fileName) {
+			if (fileName != null) {
+				new DownloadTrack().execute(fileName);
+			}
 			
 			paint = new Paint();
 			paint.setStyle(Paint.Style.STROKE);
